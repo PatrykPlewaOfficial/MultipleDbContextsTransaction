@@ -48,11 +48,28 @@ namespace MultipleDbContextsTransaction
                 await BeginTransactionAsync(ct: ct);
             }
 
-            await SaveChangesAsync(ct);
+            try
+            {
+                await SaveChangesAsync(ct);
 
-            await Transaction!.CommitAsync(ct);
+                await Transaction!.CommitAsync(ct); //ToDo: Catch and rollback
 
-            await Transaction.DisposeAsync();
+                PostCommitCleanUp();
+            }
+            catch (Exception e)
+            {
+                await Transaction!.RollbackAsync(ct);
+
+                PostCommitCleanUp();
+
+                Console.WriteLine(e);
+                throw;
+            }
+        }
+
+        private void PostCommitCleanUp()
+        {
+            Transaction?.Dispose();
             Transaction = null;
 
             for (var i = 0; i < _dbContexts.Count; i++)
@@ -60,7 +77,6 @@ namespace MultipleDbContextsTransaction
                 // due to bug
                 _dbContexts[i].Database.CurrentTransaction?.Dispose();
             }
-
         }
 
         public async Task SaveChangesAsync(CancellationToken ct = default)
